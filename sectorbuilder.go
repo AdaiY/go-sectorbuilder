@@ -409,10 +409,10 @@ func (sb *SectorBuilder) checkCache(id uint64) error {
 		if !os.IsNotExist(err) {
 			return xerrors.Errorf("local cache file stat: %w", err)
 		}
-		cmd := exec.Command("mv", "-rf", string(localCachePath), string(cachePath))
-		log.Infof("moving sector cache: cp -rf %s %s", string(localCachePath), string(cachePath))
+		cmd := exec.Command("mv", "-f", string(localCachePath), string(cachePath))
+		log.Infof("moving sector cache: mv -f %s %s", string(localCachePath), string(cachePath))
 		if err := cmd.Run(); err != nil {
-			return xerrors.Errorf("copy sector cache: %w", err)
+			return xerrors.Errorf("move sector cache: %w", err)
 		}
 	}
 
