@@ -165,7 +165,7 @@ func (sb *SectorBuilder) ReadPieceFromSealedSector(ctx context.Context, sectorID
 func (sb *SectorBuilder) SealPreCommit(ctx context.Context, sectorID uint64, ticket SealTicket, pieces []PublicPieceInfo) (RawSealPreCommitOutput, error) {
 	sfs := sb.filesystem
 
-	cacheDir, err := sfs.ForceAllocSector(fs.DataCache, sb.Miner, sb.ssize, true, sectorID)
+	cacheDir, err := sfs.ForceAllocSector(fs.DataLocalCache, sb.Miner, sb.ssize, true, sectorID)
 	if err != nil {
 		return RawSealPreCommitOutput{}, xerrors.Errorf("getting cache dir: %w", err)
 	}
@@ -280,7 +280,7 @@ func (sb *SectorBuilder) sealCommitLocal(ctx context.Context, sectorID uint64, t
 		<-sb.rateLimit
 	}()
 
-	cacheDir, err := sb.SectorPath(fs.DataCache, sectorID)
+	cacheDir, err := sb.SectorPath(fs.DataLocalCache, sectorID)
 	if err != nil {
 		return nil, err
 	}
@@ -327,10 +327,13 @@ func (sb *SectorBuilder) SealCommit(ctx context.Context, sectorID uint64, ticket
 
 	atomic.AddInt32(&sb.commitWait, 1)
 
-	select { // prefer remote
-	case sb.commitTasks <- call:
+	workerId, ok := sb.sectorWorkers[sectorID]
+	if ok {
+		go func() {
+			sb.doTask(ctx, sb.remotes[workerId], call)
+		}()
 		proof, err = sb.sealCommitRemote(call)
-	default:
+	} else {
 		sb.checkRateLimit()
 
 		rl := sb.rateLimit
@@ -339,18 +342,40 @@ func (sb *SectorBuilder) SealCommit(ctx context.Context, sectorID uint64, ticket
 		}
 
 		select { // use whichever is available
-		case sb.commitTasks <- call:
-			proof, err = sb.sealCommitRemote(call)
 		case rl <- struct{}{}:
 			proof, err = sb.sealCommitLocal(ctx, sectorID, ticket, seed, pieces, rspco)
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
 	}
+
+	//select { // prefer remote
+	//case sb.commitTasks <- call:
+	//	proof, err = sb.sealCommitRemote(call)
+	//default:
+	//	sb.checkRateLimit()
+	//
+	//	rl := sb.rateLimit
+	//	if sb.noCommit {
+	//		rl = make(chan struct{})
+	//	}
+	//
+	//	select { // use whichever is available
+	//	case sb.commitTasks <- call:
+	//		proof, err = sb.sealCommitRemote(call)
+	//	case rl <- struct{}{}:
+	//		proof, err = sb.sealCommitLocal(ctx, sectorID, ticket, seed, pieces, rspco)
+	//	case <-ctx.Done():
+	//		return nil, ctx.Err()
+	//	}
+	//}
 	if err != nil {
 		return nil, xerrors.Errorf("commit: %w", err)
 	}
 
+	if ok {
+		delete(sb.sectorWorkers, sectorID)
+	}
 	return proof, nil
 }
 

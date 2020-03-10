@@ -41,6 +41,7 @@ func (sb *SectorBuilder) AddWorker(ctx context.Context, cfg WorkerCfg) (<-chan W
 	r := &remote{
 		sealTasks: taskCh,
 		busy:      0,
+		id:        sb.remoteCtr + 1,
 	}
 
 	sb.remoteCtr++
@@ -56,8 +57,8 @@ func (sb *SectorBuilder) returnTask(task workerCall) {
 	switch task.task.Type {
 	case WorkerPreCommit:
 		ret = sb.precommitTasks
-	case WorkerCommit:
-		ret = sb.commitTasks
+	//case WorkerCommit:
+	//	ret = sb.commitTasks
 	default:
 		log.Error("unknown task type", task.task.Type)
 	}
@@ -90,16 +91,17 @@ func (sb *SectorBuilder) remoteWorker(ctx context.Context, r *remote, cfg Worker
 	if cfg.NoPreCommit {
 		precommits = nil
 	}
-	commits := sb.commitTasks
-	if cfg.NoCommit {
-		commits = nil
-	}
+	//commits := sb.commitTasks
+	//if cfg.NoCommit {
+	//	commits = nil
+	//}
 
 	for {
 		select {
-		case task := <-commits:
-			sb.doTask(ctx, r, task)
+		//case task := <-commits:
+		//	sb.doTask(ctx, r, task)
 		case task := <-precommits:
+			sb.sectorWorkers[task.task.SectorID] = r.id
 			sb.doTask(ctx, r, task)
 		case <-ctx.Done():
 			return

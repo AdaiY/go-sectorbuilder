@@ -52,7 +52,9 @@ type SectorBuilder struct {
 	rateLimit   chan struct{}
 
 	precommitTasks chan workerCall
-	commitTasks    chan workerCall
+	// commitTasks    chan workerCall
+
+	sectorWorkers map[uint64]int
 
 	taskCtr       uint64
 	remoteLk      sync.Mutex
@@ -76,6 +78,8 @@ type remote struct {
 
 	sealTasks chan<- WorkerTask
 	busy      uint64 // only for metrics
+
+	id int
 }
 
 type JsonRSPCO struct {

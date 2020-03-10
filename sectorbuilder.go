@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strconv"
 	"sync/atomic"
 
@@ -94,9 +96,10 @@ func New(cfg *Config, ds datastore.Batching) (*SectorBuilder, error) {
 
 		taskCtr:        1,
 		precommitTasks: make(chan workerCall),
-		commitTasks:    make(chan workerCall),
-		remoteResults:  map[uint64]chan<- SealRes{},
-		remotes:        map[int]*remote{},
+		//commitTasks:    make(chan workerCall),
+		sectorWorkers: make(map[uint64]int),
+		remoteResults: map[uint64]chan<- SealRes{},
+		remotes:       map[int]*remote{},
 
 		stopping: make(chan struct{}),
 	}
@@ -275,6 +278,10 @@ func fallbackPostChallengeCount(sectors uint64, faults uint64) uint64 {
 }
 
 func (sb *SectorBuilder) FinalizeSector(ctx context.Context, id uint64) error {
+	if err := sb.checkCache(id); err != nil {
+		return xerrors.Errorf("getting local sector cache: %w", err)
+	}
+
 	sealed, err := sb.filesystem.FindSector(fs.DataSealed, sb.Miner, id)
 	if err != nil {
 		return xerrors.Errorf("getting sealed sector: %w", err)
@@ -386,4 +393,28 @@ func (sb *SectorBuilder) SetLastSectorID(id uint64) error {
 
 func (sb *SectorBuilder) Stop() {
 	close(sb.stopping)
+}
+
+func (sb *SectorBuilder) checkCache(id uint64) error {
+	lotusStoragePath, ex := os.LookupEnv("LOTUS_STORAGE_PATH")
+	if !ex {
+		lotusStoragePath = os.Getenv("HOME") + "/.lotusstorage"
+	}
+
+	cachePath := fs.SectorPath(filepath.Join(lotusStoragePath, string(fs.DataCache), fs.SectorName(sb.Miner, id)))
+	localCachePath := fs.SectorPath(filepath.Join(os.Getenv("HOME")+"/.lotusstorage/", string(fs.DataLocalCache), fs.SectorName(sb.Miner, id)))
+
+	_, err := os.Stat(string(cachePath))
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return xerrors.Errorf("local cache file stat: %w", err)
+		}
+		cmd := exec.Command("mv", "-rf", string(localCachePath), string(cachePath))
+		log.Infof("moving sector cache: cp -rf %s %s", string(localCachePath), string(cachePath))
+		if err := cmd.Run(); err != nil {
+			return xerrors.Errorf("copy sector cache: %w", err)
+		}
+	}
+
+	return nil
 }
