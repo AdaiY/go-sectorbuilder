@@ -170,7 +170,7 @@ func (sb *SectorBuilder) SealPreCommit(ctx context.Context, sectorID uint64, tic
 		return RawSealPreCommitOutput{}, xerrors.Errorf("getting cache dir: %w", err)
 	}
 
-	sealedPath, err := sfs.ForceAllocSector(fs.DataSealed, sb.Miner, sb.ssize, true, sectorID)
+	sealedPath, err := sfs.ForceAllocSector(fs.DataLocalSealed, sb.Miner, sb.ssize, true, sectorID)
 	if err != nil {
 		return RawSealPreCommitOutput{}, xerrors.Errorf("getting sealed sector paths: %w", err)
 	}

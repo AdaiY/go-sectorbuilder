@@ -24,11 +24,12 @@ var ErrNoSuitablePath = errors.New("no suitable path for sector fond")
 type DataType string
 
 const (
-	DataCache      DataType = "cache"
-	DataLocalCache DataType = "localcache"
-	DataStaging    DataType = "staging"
-	DataSealed     DataType = "sealed"
-	DataUnsealed   DataType = "unsealed"
+	DataCache       DataType = "cache"
+	DataLocalCache  DataType = "localcache"
+	DataLocalSealed DataType = "localsealed"
+	DataStaging     DataType = "staging"
+	DataSealed      DataType = "sealed"
+	DataUnsealed    DataType = "unsealed"
 )
 
 var types = []DataType{DataCache, DataStaging, DataSealed, DataUnsealed}

@@ -278,7 +278,7 @@ func fallbackPostChallengeCount(sectors uint64, faults uint64) uint64 {
 }
 
 func (sb *SectorBuilder) FinalizeSector(ctx context.Context, id uint64) error {
-	if err := sb.checkCache(id); err != nil {
+	if err := sb.checkSealedAndCache(id); err != nil {
 		return xerrors.Errorf("getting local sector cache: %w", err)
 	}
 
@@ -395,20 +395,35 @@ func (sb *SectorBuilder) Stop() {
 	close(sb.stopping)
 }
 
-func (sb *SectorBuilder) checkCache(id uint64) error {
+func (sb *SectorBuilder) checkSealedAndCache(id uint64) error {
 	lotusStoragePath, ex := os.LookupEnv("LOTUS_STORAGE_PATH")
 	if !ex {
 		lotusStoragePath = os.Getenv("HOME") + "/.lotusstorage"
 	}
 
+	sealedPath := fs.SectorPath(filepath.Join(lotusStoragePath, string(fs.DataSealed), fs.SectorName(sb.Miner, id)))
+	localSealedPath := fs.SectorPath(filepath.Join(os.Getenv("HOME")+"/.lotusstorage/", string(fs.DataLocalSealed), fs.SectorName(sb.Miner, id)))
+	_, err := os.Stat(string(sealedPath))
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return xerrors.Errorf("local sealed file stat: %w", err)
+		}
+
+		cmd := exec.Command("mv", "-f", string(localSealedPath), string(sealedPath))
+		log.Infof("moving sealed sector: mv -f %s %s", string(localSealedPath), string(sealedPath))
+		if err := cmd.Run(); err != nil {
+			return xerrors.Errorf("move sealed sector: %w", err)
+		}
+	}
+
 	cachePath := fs.SectorPath(filepath.Join(lotusStoragePath, string(fs.DataCache), fs.SectorName(sb.Miner, id)))
 	localCachePath := fs.SectorPath(filepath.Join(os.Getenv("HOME")+"/.lotusstorage/", string(fs.DataLocalCache), fs.SectorName(sb.Miner, id)))
-
-	_, err := os.Stat(string(cachePath))
+	_, err = os.Stat(string(cachePath))
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return xerrors.Errorf("local cache file stat: %w", err)
 		}
+
 		cmd := exec.Command("mv", "-f", string(localCachePath), string(cachePath))
 		log.Infof("moving sector cache: mv -f %s %s", string(localCachePath), string(cachePath))
 		if err := cmd.Run(); err != nil {
